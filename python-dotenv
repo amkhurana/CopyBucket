@@ -1,0 +1,5 @@
+AWS_ACCESS_KEY_ID=odl_user_1967138
+AWS_SECRET_ACCESS_KEY=jphc31LAG*hx
+AWS_DEFAULT_REGION=us-east-1
+SOURCE_BUCKET=my-source-bucket
+DESTINATION_BUCKET=my-destination-bucket
