@@ -1,2 +1,2 @@
-boto3
-botocore
+boto3==1.28.20
+awscli
