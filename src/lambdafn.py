@@ -1,33 +1,61 @@
+from flask import Flask, render_template, request, jsonify
 import boto3
-import botocore
-import os
-import logging
-from urllib.parse import unquote_plus
+import re
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+app = Flask(__name__)
 
-s3 = boto3.resource('s3')
+s3 = boto3.client('s3')
 
-def lambda_handler(event, context):
-    logger.info("New files uploaded to the source bucket.")
-        
-    # Decode the key
-    key = unquote_plus(event['Records'][0]['s3']['object']['key'])
-    
-    source_bucket = event['Records'][0]['s3']['bucket']['name']
-    destination_bucket = os.environ['DESTINATION_BUCKET']
-    
-    source = {'Bucket': source_bucket, 'Key': key}
-        
+# -------------------------
+# VALIDATION HELPERS
+# -------------------------
+
+def validate_bucket_name(name):
+    pattern = r'^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?$'
+    return bool(re.match(pattern, name))
+
+def bucket_exists(bucket_name):
     try:
-        response = s3.meta.client.copy(source, destination_bucket, key)
-        logger.info("File copied to the destination bucket successfully!")
+        s3.head_bucket(Bucket=bucket_name)
+        return True
+    except:
+        return False
+
+
+@app.route('/')
+def home():
+    return render_template('index.html')
+
+
+@app.route('/transfer', methods=['POST'])
+def transfer_file():
+    data = request.json
+    source_bucket = data.get('source_bucket')
+    dest_bucket = data.get('dest_bucket')
+    key = data.get('key')
+
+    # Validation
+    if not validate_bucket_name(source_bucket):
+        return jsonify({"status": "error", "message": "Invalid source bucket name"}), 400
+
+    if not validate_bucket_name(dest_bucket):
+        return jsonify({"status": "error", "message": "Invalid destination bucket name"}), 400
+
+    if not bucket_exists(source_bucket):
+        return jsonify({"status": "error", "message": "Source bucket does not exist"}), 404
+
+    if not bucket_exists(dest_bucket):
+        return jsonify({"status": "error", "message": "Destination bucket does not exist"}), 404
+
+    try:
+        copy_source = {'Bucket': source_bucket, 'Key': key}
+        s3.copy(copy_source, dest_bucket, key)
         
-    except botocore.exceptions.ClientError as error:
-        logger.error("There was an error copying the file to the destination bucket")
-        logger.error('Error Message: {}'.format(error))
-        
-    except botocore.exceptions.ParamValidationError as error:
-        logger.error("Missing required parameters while calling the API.")
-        logger.error('Error Message: {}'.format(error))
+        return jsonify({"status": "success", "message": "File transferred successfully!"})
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
